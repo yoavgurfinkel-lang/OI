@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>3D Optical Illusion</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  min-height:100vh;background:#111;
+  font-family:system-ui,sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  padding:18px 14px;gap:14px;
+}
+h1{font-size:22px;font-weight:800;letter-spacing:-0.5px;text-align:center;}
+h1 span{color:#fff;background:#000;padding:2px 6px;}
+.sub{font-size:12px;color:rgba(255,255,255,0.4);text-align:center;max-width:400px;line-height:1.5;}
+.canvas-wrap{width:100%;max-width:460px;border-radius:10px;overflow:hidden;box-shadow:0 0 40px rgba(255,255,255,0.1);}
+canvas{display:block;width:100%;height:auto;}
+.panel{width:100%;max-width:460px;background:#1a1a1a;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;}
+.upload-zone{border:2px dashed rgba(255,255,255,0.2);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:all 0.2s;}
+.upload-zone:hover,.upload-zone.drag{border-color:#fff;background:rgba(255,255,255,0.05);}
+.upload-zone .ico{font-size:24px;margin-bottom:4px;}
+.upload-zone .lbl{font-size:13px;font-weight:600;}
+.upload-zone .hint{font-size:11px;color:rgba(255,255,255,0.3);margin-top:2px;}
+.row{display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:5px;}
+.val{color:#fff;font-weight:700;}
+input[type=range]{width:100%;accent-color:#fff;cursor:pointer;}
+.mode-btns{display:flex;gap:6px;flex-wrap:wrap;}
+.mode-btn{flex:1;min-width:60px;padding:7px 4px;border:1px solid rgba(255,255,255,0.2);border-radius:6px;background:transparent;color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;transition:all 0.15s;text-align:center;}
+.mode-btn.active{background:#fff;color:#000;font-weight:700;border-color:#fff;}
+.anim-btns{display:flex;gap:6px;}
+.anim-btn{flex:1;padding:7px;border:1px solid rgba(255,255,255,0.2);border-radius:6px;background:transparent;color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;transition:all 0.15s;}
+.anim-btn.active{background:#e94560;color:#fff;font-weight:700;border-color:#e94560;}
+.btn{background:#fff;color:#000;border:none;border-radius:7px;font-size:13px;font-weight:700;padding:11px;cursor:pointer;transition:opacity 0.2s;}
+.btn:hover{opacity:0.85;}
+.tip{max-width:460px;font-size:11px;color:rgba(255,255,255,0.2);text-align:center;line-height:1.6;padding-bottom:10px;}
+.section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.3);margin-bottom:4px;}
+</style>
+</head>
+<body>
+
+<h1>3D <span>OPTICAL</span> ILLUSION</h1>
+<p class="sub">Your photo pushes through an animated grid — the movement tricks the brain into seeing real 3D depth.</p>
+
+<div class="canvas-wrap">
+  <canvas id="c" width="460" height="460"></canvas>
+</div>
+
+<div class="panel">
+  <div class="upload-zone" id="dropZone">
+    <div class="ico">📷</div>
+    <div class="lbl" id="uploadLabel">Upload your photo</div>
+    <div class="hint">Tap to browse · drag &amp; drop</div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none"/>
+  </div>
+
+  <div>
+    <div class="section-label">Pattern</div>
+    <div class="mode-btns">
+      <button class="mode-btn active" data-mode="grid">Grid</button>
+      <button class="mode-btn" data-mode="stripes">Stripes</button>
+      <button class="mode-btn" data-mode="rings">Rings</button>
+      <button class="mode-btn" data-mode="dots">Dots</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label">Animation</div>
+    <div class="anim-btns">
+      <button class="anim-btn active" data-anim="pulse">● Pulse</button>
+      <button class="anim-btn" data-anim="spin">↺ Spin</button>
+      <button class="anim-btn" data-anim="breathe">◎ Breathe</button>
+      <button class="anim-btn" data-anim="none">■ Still</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="row"><span>Bulge Strength</span><span class="val" id="bulgeVal">72%</span></div>
+    <input type="range" id="bulgeSlider" min="10" max="100" value="72"/>
+  </div>
+
+  <div>
+    <div class="row"><span>Subject Size</span><span class="val" id="sizeVal">58%</span></div>
+    <input type="range" id="sizeSlider" min="20" max="90" value="58"/>
+  </div>
+
+  <div>
+    <div class="row"><span>Animation Speed</span><span class="val" id="speedVal">Medium</span></div>
+    <input type="range" id="speedSlider" min="1" max="3" value="2" step="1"/>
+  </div>
+
+  <div>
+    <div class="row"><span>Grid Density</span><span class="val" id="densityVal">Medium</span></div>
+    <input type="range" id="densitySlider" min="1" max="3" value="2" step="1"/>
+  </div>
+
+  <button class="btn" id="downloadBtn">↓ Save Image</button>
+</div>
+
+<div class="tip">💡 Try <strong style="color:rgba(255,255,255,0.5)">Rings + Pulse</strong> or <strong style="color:rgba(255,255,255,0.5)">Grid + Spin</strong> — the motion is what sells the 3D illusion to the brain.</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const SZ = canvas.width;
+
+let img = null;
+let bulge = 0.72;
+let subjSize = 0.58;
+let density = 2;
+let mode = 'grid';
+let animMode = 'pulse';
+let speedLevel = 2;
+let animFrame = null;
+let time = 0;
+
+// Offscreen canvas for subject
+const osc = document.createElement('canvas');
+osc.width = SZ; osc.height = SZ;
+const octx = osc.getContext('2d');
+
+// ─────────────────────────────────────────────
+//  ANIMATION LOOP
+// ─────────────────────────────────────────────
+const speeds = [0.008, 0.022, 0.05];
+
+function loop() {
+  const spd = speeds[speedLevel - 1];
+  time += spd;
+  render();
+  animFrame = requestAnimationFrame(loop);
+}
+
+function startAnim() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  if (animMode === 'none') { render(); return; }
+  loop();
+}
+
+// ─────────────────────────────────────────────
+//  BULGE DISPLACEMENT — with animation time
+// ─────────────────────────────────────────────
+function getBulge(px, py) {
+  const cx = SZ * 0.5, cy = SZ * 0.5;
+  const radius = SZ * subjSize * 0.5;
+
+  let bx = px, by = py;
+
+  // Animation modifies the effective center or the displacement
+  let ecx = cx, ecy = cy;
+  let animScale = 1.0;
+  let rotOffset = 0;
+
+  if (animMode === 'spin') {
+    // Rotate the grid around center — creates spinning illusion
+    rotOffset = time;
+  } else if (animMode === 'pulse') {
+    // Bulge strength pulses in and out
+    animScale = 1.0 + Math.sin(time * 2) * 0.35;
+  } else if (animMode === 'breathe') {
+    // Radius breathes — sphere seems to inhale/exhale
+    animScale = 1.0 + Math.sin(time) * 0.22;
+  }
+
+  const dx = bx - ecx, dy = by - ecy;
+  let dist = Math.sqrt(dx*dx + dy*dy);
+  const effectiveRadius = radius * (animMode === 'breathe' ? animScale : 1.0);
+
+  if (dist >= effectiveRadius) return { dx: 0, dy: 0, inside: false, t: 0 };
+
+  const t = 1 - (dist / effectiveRadius);
+  const smooth = t * t * (3 - 2 * t);
+
+  const pushStr = effectiveRadius * bulge * smooth * 0.55 * (animMode === 'pulse' ? animScale : 1.0);
+  let angle = Math.atan2(dy, dx);
+  if (animMode === 'spin') angle += rotOffset * smooth * 0.6;
+
+  return {
+    dx: Math.cos(angle) * pushStr,
+    dy: Math.sin(angle) * pushStr,
+    inside: true,
+    t: smooth
+  };
+}
+
+// ─────────────────────────────────────────────
+//  RENDER
+// ─────────────────────────────────────────────
+function render() {
+  ctx.clearRect(0, 0, SZ, SZ);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, SZ, SZ);
+
+  if (img) drawSubjectOffscreen();
+
+  // Draw pattern
+  if (mode === 'grid')         drawGrid();
+  else if (mode === 'stripes') drawStripes();
+  else if (mode === 'rings')   drawRings();
+  else if (mode === 'dots')    drawDots();
+
+  // Overlay subject inside bulge
+  if (img) compositeSubject();
+}
+
+function drawSubjectOffscreen() {
+  octx.clearRect(0, 0, SZ, SZ);
+  const r = SZ * subjSize * 0.5;
+  const cx = SZ * 0.5, cy = SZ * 0.5;
+  const imgAspect = img.width / img.height;
+  let iw, ih;
+  if (imgAspect > 1) { ih = r*2; iw = ih * imgAspect; }
+  else { iw = r*2; ih = iw / imgAspect; }
+  octx.save();
+  octx.beginPath();
+  octx.arc(cx, cy, r * 0.98, 0, Math.PI*2);
+  octx.clip();
+  octx.drawImage(img, cx - iw/2, cy - ih/2, iw, ih);
+  octx.restore();
+}
+
+function compositeSubject() {
+  const r = SZ * subjSize * 0.5;
+  const cx = SZ * 0.5, cy = SZ * 0.5;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.96, 0, Math.PI*2);
+  ctx.clip();
+  // Draw with 'destination-over' so grid lines appear ON TOP
+  ctx.globalCompositeOperation = 'destination-over';
+  ctx.drawImage(osc, 0, 0);
+  ctx.restore();
+
+  // Vignette edge
+  ctx.save();
+  const vig = ctx.createRadialGradient(cx,cy,r*0.65,cx,cy,r);
+  vig.addColorStop(0,'rgba(0,0,0,0)');
+  vig.addColorStop(1,'rgba(0,0,0,0.8)');
+  ctx.beginPath(); ctx.arc(cx,cy,r*1.01,0,Math.PI*2); ctx.clip();
+  ctx.fillStyle=vig; ctx.fill();
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+//  PATTERNS
+// ─────────────────────────────────────────────
+function drawLine(pts) {
+  if (pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+}
+
+function warpPt(bx, by) {
+  const d = getBulge(bx, by);
+  return { x: bx + d.dx, y: by + d.dy };
+}
+
+function drawGrid() {
+  const spacing = [38, 24, 15][density-1];
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.1;
+  // Horizontal
+  for (let y0 = 0; y0 <= SZ; y0 += spacing) {
+    const pts = [];
+    for (let x = 0; x <= SZ; x += 3) pts.push(warpPt(x, y0));
+    drawLine(pts);
+  }
+  // Vertical
+  for (let x0 = 0; x0 <= SZ; x0 += spacing) {
+    const pts = [];
+    for (let y = 0; y <= SZ; y += 3) pts.push(warpPt(x0, y));
+    drawLine(pts);
+  }
+}
+
+function drawStripes() {
+  const spacing = [26, 16, 10][density-1];
+  ctx.lineWidth = spacing * 0.44;
+
+  for (let i = -SZ; i <= SZ*2; i += spacing) {
+    if (Math.floor(i/spacing) % 2 !== 0) continue;
+    ctx.strokeStyle = '#fff';
+    const pts = [];
+    for (let t = 0; t <= SZ*1.5; t += 3) {
+      const bx = i + Math.cos(Math.PI*0.75)*t;
+      const by = Math.sin(Math.PI*0.75)*t;
+      if (bx < -20 || bx > SZ+20 || by < -20 || by > SZ+20) continue;
+      pts.push(warpPt(bx, by));
+    }
+    drawLine(pts);
+  }
+}
+
+function drawRings() {
+  const spacing = [26, 17, 10][density-1];
+  const cx0 = SZ*0.5, cy0 = SZ*0.5;
+  const maxR = SZ * 0.78;
+
+  // Animate ring offset — rings scroll inward or outward
+  let ringOffset = 0;
+  if (animMode === 'pulse')   ringOffset = (time * 8) % spacing;
+  if (animMode === 'breathe') ringOffset = (time * 4) % spacing;
+  if (animMode === 'spin')    ringOffset = (time * 5) % spacing;
+
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4;
+  for (let r0 = ringOffset; r0 < maxR; r0 += spacing) {
+    const steps = Math.max(60, Math.floor(r0 * 3.5));
+    const pts = [];
+    for (let s = 0; s <= steps; s++) {
+      const angle = (s/steps)*Math.PI*2;
+      const bx = cx0 + Math.cos(angle)*r0;
+      const by = cy0 + Math.sin(angle)*r0;
+      pts.push(warpPt(bx, by));
+    }
+    if (pts.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+      ctx.closePath(); ctx.stroke();
+    }
+  }
+
+  // Radial spokes, spinning for spin mode
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 0.8;
+  const spokes = [8,12,18][density-1];
+  const spokeOffset = animMode === 'spin' ? time * 0.4 : 0;
+  for (let s = 0; s < spokes; s++) {
+    const angle = (s/spokes)*Math.PI*2 + spokeOffset;
+    const pts = [];
+    for (let r = 2; r < maxR; r += 3) {
+      pts.push(warpPt(cx0 + Math.cos(angle)*r, cy0 + Math.sin(angle)*r));
+    }
+    drawLine(pts);
+  }
+}
+
+function drawDots() {
+  const spacing = [30, 20, 13][density-1];
+  // Animate: dots pulse in size
+  const dotPulse = animMode === 'pulse'   ? 1 + Math.sin(time*2)*0.5
+                 : animMode === 'breathe' ? 1 + Math.sin(time)*0.3
+                 : 1;
+
+  // Scroll offset for moving dots (creates "flowing toward viewer" feeling)
+  let scrollX = 0, scrollY = 0;
+  if (animMode === 'spin') {
+    scrollX = Math.cos(time*0.7) * spacing * 0.4;
+    scrollY = Math.sin(time*0.7) * spacing * 0.4;
+  } else if (animMode === 'pulse' || animMode === 'breathe') {
+    // Radial scroll: dots flow outward from center
+  }
+
+  ctx.fillStyle = '#fff';
+  for (let y0 = spacing*0.5 + (scrollY % spacing); y0 <= SZ+spacing; y0 += spacing) {
+    for (let x0 = spacing*0.5 + (scrollX % spacing); x0 <= SZ+spacing; x0 += spacing) {
+      const bx = ((x0 % (SZ + spacing)) + SZ + spacing) % (SZ + spacing) - spacing*0.5;
+      const by = ((y0 % (SZ + spacing)) + SZ + spacing) % (SZ + spacing) - spacing*0.5;
+      const d = getBulge(bx, by);
+      const px = bx + d.dx, py = by + d.dy;
+      const dotR = (1.5 + d.t * 1.8) * dotPulse;
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(0.5, dotR), 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  EVENTS
+// ─────────────────────────────────────────────
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    mode = this.dataset.mode;
+    startAnim();
+  });
+});
+
+document.querySelectorAll('.anim-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.anim-btn').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    animMode = this.dataset.anim;
+    startAnim();
+  });
+});
+
+document.getElementById('bulgeSlider').addEventListener('input', function() {
+  bulge = this.value/100;
+  document.getElementById('bulgeVal').textContent = this.value+'%';
+});
+document.getElementById('sizeSlider').addEventListener('input', function() {
+  subjSize = this.value/100;
+  document.getElementById('sizeVal').textContent = this.value+'%';
+  if (img) drawSubjectOffscreen();
+});
+document.getElementById('speedSlider').addEventListener('input', function() {
+  speedLevel = parseInt(this.value);
+  document.getElementById('speedVal').textContent = ['Slow','Medium','Fast'][speedLevel-1];
+});
+document.getElementById('densitySlider').addEventListener('input', function() {
+  density = parseInt(this.value);
+  document.getElementById('densityVal').textContent = ['Coarse','Medium','Fine'][density-1];
+});
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('click', ()=>fileInput.click());
+dropZone.addEventListener('dragover', e=>{e.preventDefault();dropZone.classList.add('drag');});
+dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e=>{e.preventDefault();dropZone.classList.remove('drag');loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change', ()=>loadFile(fileInput.files[0]));
+
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  // Capture current frame
+  const a=document.createElement('a');
+  a.download='optical-illusion.png';
+  a.href=canvas.toDataURL('image/png');
+  a.click();
+});
+
+function loadFile(file) {
+  if(!file||!file.type.startsWith('image/')) return;
+  const i = new Image();
+  i.onload = ()=>{
+    img = i;
+    document.getElementById('uploadLabel').textContent = 'Replace photo';
+    drawSubjectOffscreen();
+  };
+  i.src = URL.createObjectURL(file);
+}
+
+startAnim();
+</script>
+</body>
+</html>
