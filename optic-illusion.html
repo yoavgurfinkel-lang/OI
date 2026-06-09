@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>3D Optical Illusion</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  min-height:100vh;background:#000;
+  font-family:system-ui,sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  padding:16px 12px;gap:12px;
+}
+h1{font-size:20px;font-weight:800;text-align:center;letter-spacing:-0.3px;}
+h1 em{color:#aaa;font-style:normal;}
+.sub{font-size:11px;color:rgba(255,255,255,0.35);text-align:center;max-width:400px;line-height:1.5;}
+.canvas-wrap{width:100%;max-width:460px;border-radius:8px;overflow:hidden;}
+canvas{display:block;width:100%;height:auto;background:#000;}
+.panel{width:100%;max-width:460px;background:#161616;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:11px;}
+.upload-zone{border:2px dashed rgba(255,255,255,0.18);border-radius:7px;padding:18px;text-align:center;cursor:pointer;transition:all 0.2s;}
+.upload-zone:hover,.upload-zone.drag{border-color:#fff;background:rgba(255,255,255,0.04);}
+.upload-zone .ico{font-size:22px;margin-bottom:3px;}
+.upload-zone .lbl{font-size:13px;font-weight:600;}
+.upload-zone .hint{font-size:11px;color:rgba(255,255,255,0.3);margin-top:2px;}
+.row{display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.55);margin-bottom:4px;}
+.val{color:#fff;font-weight:700;}
+input[type=range]{width:100%;accent-color:#fff;cursor:pointer;}
+.btns{display:flex;gap:6px;}
+.btn-s{flex:1;padding:7px 4px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;background:transparent;color:rgba(255,255,255,0.45);font-size:11px;cursor:pointer;transition:all 0.15s;text-align:center;}
+.btn-s.active{background:#fff;color:#000;font-weight:700;border-color:#fff;}
+.btn{width:100%;background:#fff;color:#000;border:none;border-radius:7px;font-size:13px;font-weight:700;padding:11px;cursor:pointer;}
+.lbl-s{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.28);margin-bottom:3px;}
+</style>
+</head>
+<body>
+
+<h1>HALFTONE <em>3D</em></h1>
+<p class="sub">Your photo is rebuilt entirely from dots — the dot sizes encode brightness, creating depth and texture from the pattern itself.</p>
+
+<div class="canvas-wrap">
+  <canvas id="c" width="460" height="460"></canvas>
+</div>
+
+<div class="panel">
+  <div class="upload-zone" id="dropZone">
+    <div class="ico">📷</div>
+    <div class="lbl" id="uploadLabel">Upload your photo</div>
+    <div class="hint">Tap to browse · drag &amp; drop</div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none"/>
+  </div>
+
+  <div>
+    <div class="lbl-s">Dot Style</div>
+    <div class="btns">
+      <button class="btn-s active" data-mode="classic">Classic</button>
+      <button class="btn-s" data-mode="invert">Invert</button>
+      <button class="btn-s" data-mode="color">Color</button>
+      <button class="btn-s" data-mode="cmyk">CMYK</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="lbl-s">Animation</div>
+    <div class="btns">
+      <button class="btn-s active" data-anim="pulse">Pulse</button>
+      <button class="btn-s" data-anim="wave">Wave</button>
+      <button class="btn-s" data-anim="breathe">Breathe</button>
+      <button class="btn-s" data-anim="none">Still</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="row"><span>Dot Size</span><span class="val" id="dotVal">Fine</span></div>
+    <input type="range" id="dotSlider" min="1" max="3" value="2" step="1"/>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.2);margin-top:2px;">
+      <span>Ultra fine</span><span>Medium</span><span>Chunky</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="row"><span>Contrast</span><span class="val" id="contrastVal">100%</span></div>
+    <input type="range" id="contrastSlider" min="50" max="200" value="100"/>
+  </div>
+
+  <button class="btn" id="downloadBtn">↓ Save Image</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const SZ = 460;
+canvas.width = SZ; canvas.height = SZ;
+
+let img = null;
+let dotLevel = 2;    // 1=fine 2=medium 3=chunky
+let contrast = 1.0;
+let mode = 'classic';
+let animMode = 'pulse';
+let time = 0;
+let rafId = null;
+
+// Offscreen for sampling pixel data
+const sample = document.createElement('canvas');
+const sctx = sample.getContext('2d');
+
+// Dot spacings per level
+const SPACINGS = [4, 7, 12];
+
+function getSpacing() { return SPACINGS[dotLevel-1]; }
+
+// ── Sample the image into a grid of brightness values ──
+function buildPixelGrid(spacing) {
+  if (!img) return null;
+  const cols = Math.ceil(SZ / spacing);
+  const rows = Math.ceil(SZ / spacing);
+  sample.width = cols; sample.height = rows;
+  sctx.save();
+  // Fill with white first (for areas outside image)
+  sctx.fillStyle = '#fff';
+  sctx.fillRect(0,0,cols,rows);
+  // Draw image scaled to grid size, maintaining aspect
+  const aspect = img.width / img.height;
+  let sw = cols, sh = rows;
+  if (aspect > 1) { sh = cols/aspect; }
+  else { sw = rows*aspect; }
+  const ox = (cols-sw)/2, oy = (rows-sh)/2;
+  sctx.filter = `contrast(${contrast*100}%) brightness(110%)`;
+  sctx.drawImage(img, ox, oy, sw, sh);
+  sctx.restore();
+  const data = sctx.getImageData(0,0,cols,rows).data;
+  // Build grid: brightness 0..1
+  const grid = [];
+  for (let r=0;r<rows;r++){
+    grid[r]=[];
+    for (let c=0;c<cols;c++){
+      const i=(r*cols+c)*4;
+      const lum = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114)/255;
+      grid[r][c] = { lum, r:data[i], g:data[i+1], b:data[i+2] };
+    }
+  }
+  return { grid, cols, rows };
+}
+
+// ── Draw halftone dots ──
+function drawHalftone(gdata, spacing, t) {
+  if (!gdata) {
+    // Draw demo pattern without image
+    drawDemoPattern(spacing, t);
+    return;
+  }
+  const { grid, cols, rows } = gdata;
+  const halfSp = spacing * 0.5;
+  const maxR   = spacing * 0.52; // max dot radius = almost touching
+
+  for (let r=0; r<rows; r++) {
+    for (let c=0; c<cols; c++) {
+      const cx = c * spacing + halfSp;
+      const cy = r * spacing + halfSp;
+      let { lum, r:pr, g:pg, b:pb } = grid[r][c];
+
+      // Animation: modulate brightness with time
+      let animMod = 0;
+      if (animMode === 'pulse') {
+        animMod = Math.sin(t * 2.5) * 0.12;
+      } else if (animMode === 'wave') {
+        // Wave ripples from center
+        const dx = cx - SZ*0.5, dy = cy - SZ*0.5;
+        const dist = Math.sqrt(dx*dx+dy*dy);
+        animMod = Math.sin(dist*0.04 - t*3) * 0.15;
+      } else if (animMode === 'breathe') {
+        // Radial breathe from center
+        const dx = cx - SZ*0.5, dy = cy - SZ*0.5;
+        const dist = Math.sqrt(dx*dx+dy*dy);
+        const phase = dist * 0.02;
+        animMod = Math.sin(t - phase) * 0.1;
+      }
+
+      const modLum = Math.max(0, Math.min(1, lum + animMod));
+
+      // Dot radius: bright areas = small dot, dark = large dot (classic halftone)
+      let dotR;
+      if (mode === 'invert') {
+        dotR = modLum * maxR; // bright = large
+      } else {
+        dotR = (1 - modLum) * maxR; // dark = large (classic)
+      }
+
+      if (dotR < 0.3) continue;
+
+      if (mode === 'color' || mode === 'cmyk') {
+        ctx.fillStyle = `rgb(${pr},${pg},${pb})`;
+      } else {
+        ctx.fillStyle = '#fff';
+      }
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // For CMYK mode: add a second rotated grid at 15° offset for cyan channel
+  if (mode === 'cmyk') {
+    drawCMYKLayer(gdata, spacing, t, 15 * Math.PI/180, 'cyan');
+  }
+}
+
+function drawCMYKLayer(gdata, spacing, t, angle, channel) {
+  // Simplified: draw a second rotated dot grid with color tint
+  const { grid, cols, rows } = gdata;
+  const halfSp = spacing * 0.5;
+  const maxR = spacing * 0.3;
+  ctx.globalAlpha = 0.3;
+  for (let r=0; r<rows; r++) {
+    for (let c=0; c<cols; c++) {
+      const cx = c*spacing + halfSp + spacing*0.5*Math.cos(angle);
+      const cy = r*spacing + halfSp + spacing*0.5*Math.sin(angle);
+      if (cx < 0 || cx > SZ || cy < 0 || cy > SZ) continue;
+      const { lum } = grid[r][c];
+      let animMod = animMode==='pulse' ? Math.sin(t*2.5+1)*0.1 : 0;
+      const modLum = Math.max(0, Math.min(1, lum+animMod));
+      const dotR = (1-modLum)*maxR;
+      if (dotR < 0.3) continue;
+      ctx.fillStyle = '#0ff';
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawDemoPattern(spacing, t) {
+  const maxR = spacing * 0.52;
+  const halfSp = spacing * 0.5;
+  const cols = Math.ceil(SZ/spacing);
+  const rows = Math.ceil(SZ/spacing);
+  ctx.fillStyle = '#fff';
+  for (let r=0;r<rows;r++) {
+    for (let c=0;c<cols;c++) {
+      const cx = c*spacing+halfSp, cy = r*spacing+halfSp;
+      const dx=cx-SZ*0.5, dy=cy-SZ*0.5;
+      const dist=Math.sqrt(dx*dx+dy*dy)/(SZ*0.5);
+      let animMod = 0;
+      if (animMode==='pulse') animMod = Math.sin(t*2.5)*0.15;
+      if (animMode==='wave')  animMod = Math.sin(dist*6-t*3)*0.2;
+      if (animMode==='breathe') animMod = Math.sin(t-dist*3)*0.15;
+      const lum = Math.max(0,Math.min(1,(1-dist*0.9)+animMod));
+      const dotR = lum * maxR;
+      if (dotR < 0.3) continue;
+      ctx.beginPath();
+      ctx.arc(cx,cy,dotR,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+}
+
+// ── Main render ──
+let cachedGrid = null;
+let lastSpacing = -1;
+let lastContrast = -1;
+let lastImg = null;
+
+function render() {
+  const spacing = getSpacing();
+
+  // Only rebuild pixel grid when needed (not every frame)
+  if (img && (img !== lastImg || spacing !== lastSpacing || contrast !== lastContrast)) {
+    cachedGrid = buildPixelGrid(spacing);
+    lastImg = img; lastSpacing = spacing; lastContrast = contrast;
+  }
+  if (!img) cachedGrid = null;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, SZ, SZ);
+
+  drawHalftone(cachedGrid, spacing, time);
+}
+
+function loop() {
+  const speeds = { pulse:0.03, wave:0.04, breathe:0.018, none:0 };
+  time += speeds[animMode] || 0;
+  render();
+  rafId = requestAnimationFrame(loop);
+}
+
+function startLoop() {
+  if (rafId) cancelAnimationFrame(rafId);
+  // Always loop so animation works; just time doesn't advance for 'none'
+  loop();
+}
+
+// ── Events ──
+document.querySelectorAll('[data-mode]').forEach(b => {
+  b.addEventListener('click', function() {
+    document.querySelectorAll('[data-mode]').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+    mode = this.dataset.mode;
+  });
+});
+document.querySelectorAll('[data-anim]').forEach(b => {
+  b.addEventListener('click', function() {
+    document.querySelectorAll('[data-anim]').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+    animMode = this.dataset.anim;
+  });
+});
+
+document.getElementById('dotSlider').addEventListener('input', function() {
+  dotLevel = parseInt(this.value);
+  document.getElementById('dotVal').textContent = ['Ultra fine','Fine','Medium','Chunky'][dotLevel];
+  lastSpacing = -1; // force grid rebuild
+});
+document.getElementById('contrastSlider').addEventListener('input', function() {
+  contrast = this.value/100;
+  document.getElementById('contrastVal').textContent = this.value+'%';
+  lastContrast = -1;
+});
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('click', ()=>fileInput.click());
+dropZone.addEventListener('dragover', e=>{e.preventDefault();dropZone.classList.add('drag');});
+dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e=>{e.preventDefault();dropZone.classList.remove('drag');loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change', ()=>loadFile(fileInput.files[0]));
+
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  const a=document.createElement('a');
+  a.download='halftone-illusion.png';
+  a.href=canvas.toDataURL('image/png');
+  a.click();
+});
+
+function loadFile(file) {
+  if(!file||!file.type.startsWith('image/')) return;
+  const i=new Image();
+  i.onload=()=>{ img=i; lastImg=null; document.getElementById('uploadLabel').textContent='Replace photo'; };
+  i.src=URL.createObjectURL(file);
+}
+
+startLoop();
+</script>
+</body>
+</html>
